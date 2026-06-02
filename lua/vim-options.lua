@@ -14,11 +14,17 @@ vim.keymap.set('n', '<c-h>', ':wincmd h<CR>')
 vim.keymap.set('n', '<c-l>', ':wincmd l<CR>')
 
 -- Move lines up and down
-vim.keymap.set('n', 'K', ':m .-2<CR>==', { noremap = true })
-vim.keymap.set('n', 'J', ':m .+1<CR>==', { noremap = true })
+vim.keymap.set('n', 'K', ':m-2<CR>==', { noremap = true })
+vim.keymap.set('n', 'J', ':m+1<CR>==', { noremap = true })
 vim.keymap.set('v', 'K', ":m '<-2<CR>gv=gv", { noremap = true })
 vim.keymap.set('v', 'J', ":m '>+1<CR>gv=gv", { noremap = true })
 
 vim.keymap.set('n', '<leader>h', ':nohlsearch<CR>')
 vim.wo.number = true
 
+-- Automatically refresh buffers when files change on disk
+vim.opt.autoread = true
+vim.api.nvim_create_autocmd({ "BufEnter", "CursorHold", "CursorHoldI", "FocusGained" }, {
+  command = "if mode() != 'c' | checktime | endif",
+  pattern = { "*" },
+})
