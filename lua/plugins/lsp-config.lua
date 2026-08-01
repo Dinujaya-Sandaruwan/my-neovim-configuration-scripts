@@ -11,6 +11,9 @@ return {
     lazy = false,
     opts = {
       auto_install = true,
+      -- rustaceanvim starts rust-analyzer itself (not via lspconfig.rust_analyzer.setup()),
+      -- so auto_install never sees it; ensure_installed installs the binary without setting it up.
+      ensure_installed = { "rust_analyzer" },
     },
   },
   {
