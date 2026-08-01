@@ -6,6 +6,7 @@ vim.g.mapleader = " "
 vim.g.background = "light"
 
 vim.opt.swapfile = false
+vim.opt.mouse = "a"
 
 -- Navigate vim panes better
 vim.keymap.set('n', '<c-k>', ':wincmd k<CR>')
@@ -28,3 +29,33 @@ vim.api.nvim_create_autocmd({ "BufEnter", "CursorHold", "CursorHoldI", "FocusGai
   command = "if mode() != 'c' | checktime | endif",
   pattern = { "*" },
 })
+
+-- Auto-copy a mouse-drag visual selection to the system clipboard on release,
+-- since terminal mouse reporting (mouse=a) blocks the terminal's own
+-- native selection-to-clipboard copy.
+vim.keymap.set("v", "<LeftRelease>", function()
+  local mode = vim.fn.mode()
+  if mode ~= "v" and mode ~= "V" and mode ~= "\22" then
+    return "<LeftRelease>"
+  end
+
+  local start_pos = vim.fn.getpos("v")
+  local end_pos = vim.fn.getpos(".")
+  local dragged = start_pos[2] ~= end_pos[2] or start_pos[3] ~= end_pos[3]
+  if not dragged then
+    return "<LeftRelease>"
+  end
+
+  vim.schedule(function()
+    vim.cmd('normal! "+y')
+    local text = vim.fn.getreg("+")
+    local lines = vim.split(text, "\n")
+    if #lines > 1 then
+      vim.notify(("Copied %d lines to clipboard"):format(#lines), vim.log.levels.INFO)
+    else
+      vim.notify(("Copied %d chars to clipboard"):format(#text), vim.log.levels.INFO)
+    end
+  end)
+
+  return ""
+end, { expr = true, silent = true, desc = "Auto-copy mouse-drag visual selection to clipboard" })
