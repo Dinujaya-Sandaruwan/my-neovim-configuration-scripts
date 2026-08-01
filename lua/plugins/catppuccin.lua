@@ -5,7 +5,8 @@ return {
     name = "catppuccin",
     priority = 1000,
     config = function()
-      vim.cmd.colorscheme "catppuccin-mocha"
+      -- colorscheme disabled in favour of ayu-dark
+      -- vim.cmd.colorscheme "catppuccin-mocha"
     end
   }
 }
