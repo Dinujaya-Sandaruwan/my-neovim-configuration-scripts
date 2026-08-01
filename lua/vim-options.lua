@@ -30,6 +30,56 @@ vim.api.nvim_create_autocmd({ "BufEnter", "CursorHold", "CursorHoldI", "FocusGai
   pattern = { "*" },
 })
 
+-- Shared top-right "toast" popup: a plain vim.notify() wouldn't auto-dismiss
+-- (it just sits in the message area until overwritten), so this uses its own
+-- floating window + a timer instead. Multiple toasts stack downward below
+-- each other instead of overlapping.
+local active_toasts = {}
+
+local function show_toast(text, duration)
+  duration = duration or 10000
+  local width = math.min(vim.fn.strdisplaywidth(text) + 2, vim.o.columns - 4)
+
+  local row = 1
+  for _, t in ipairs(active_toasts) do
+    if vim.api.nvim_win_is_valid(t.win) then
+      row = row + 3
+    end
+  end
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { text })
+  vim.bo[buf].bufhidden = "wipe"
+
+  local win = vim.api.nvim_open_win(buf, false, {
+    relative = "editor",
+    width = width,
+    height = 1,
+    row = row,
+    col = vim.o.columns - width - 2,
+    style = "minimal",
+    border = "rounded",
+    focusable = false,
+    zindex = 300,
+  })
+  vim.wo[win].winhighlight = "Normal:NormalFloat,FloatBorder:FloatBorder"
+
+  local entry = { win = win }
+  table.insert(active_toasts, entry)
+
+  vim.defer_fn(function()
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+    for i, t in ipairs(active_toasts) do
+      if t == entry then
+        table.remove(active_toasts, i)
+        break
+      end
+    end
+  end, duration)
+end
+
 -- Auto-copy a mouse-drag visual selection to the system clipboard on release,
 -- since terminal mouse reporting (mouse=a) blocks the terminal's own
 -- native selection-to-clipboard copy.
@@ -51,11 +101,16 @@ vim.keymap.set("v", "<LeftRelease>", function()
     local text = vim.fn.getreg("+")
     local lines = vim.split(text, "\n")
     if #lines > 1 then
-      vim.notify(("Copied %d lines to clipboard"):format(#lines), vim.log.levels.INFO)
+      show_toast(("Copied %d lines to clipboard"):format(#lines))
     else
-      vim.notify(("Copied %d chars to clipboard"):format(#text), vim.log.levels.INFO)
+      show_toast(("Copied %d chars to clipboard"):format(#text))
     end
   end)
 
   return ""
 end, { expr = true, silent = true, desc = "Auto-copy mouse-drag visual selection to clipboard" })
+
+-- :Pwd — show the full path of the current project root (cwd) as a toast.
+vim.api.nvim_create_user_command("Pwd", function()
+  show_toast(vim.fn.getcwd())
+end, { desc = "Show the current project root path for 10 seconds" })

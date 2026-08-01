@@ -51,6 +51,11 @@ return {
       lspconfig.lua_ls.setup({
         capabilities = capabilities
       })
+      -- ESLint diagnostics as native LSP so lint problems show up in
+      -- vim.diagnostic (and Trouble) alongside typescript-tools' type errors
+      lspconfig.eslint.setup({
+        capabilities = capabilities
+      })
 
       -- Add these TypeScript-specific keymaps
       vim.keymap.set("n", "K", vim.lsp.buf.hover, {})

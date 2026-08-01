@@ -36,3 +36,29 @@
 - Added `open_map_gutter()` in `lua/plugins/mini-map.lua`: opens a real, empty, fixed-width (`winfixwidth`, matches `MAP_WIDTH = 20`) scratch window via `botright vsplit` + `enew` on the far right on `VimEnter`/`TabNewEntered` (deferred with `vim.schedule` so it runs after startup/neo-tree settle), guarded per-tab via `vim.t.minimap_gutter_win` so it's only created once. This shrinks the main buffer's actual window width, so wrap now stops before the map instead of running underneath it; the map floats over the now-blank gutter instead of real text.
 - Known caveat (not yet handled): if the user runs `:only` or otherwise closes the gutter window, it isn't automatically recreated until the next `VimEnter`/`TabNewEntered` (a full restart or new tab) — no `WinClosed` re-creation logic was added, kept intentionally minimal per user's chosen option.
 - Key file: `lua/plugins/mini-map.lua`. Uncommitted, pending user approval.
+
+## 2026-08-02 - Separate project-wide vs. current-document diagnostics view
+
+- User wanted to see TypeScript errors and lint problems for the whole open project vs. just the currently open document, separately. Previously there was no lint diagnostics source at all (only `typescript-tools.nvim` type errors and `none-ls` formatting-only sources), and no aggregated list UI — just inline virtual text per buffer.
+- Verified current API (via research) before implementing: `folke/trouble.nvim` v3's exact commands are `:Trouble diagnostics toggle` (whole workspace) and `:Trouble diagnostics toggle filter.buf=0` (current buffer only); `nvim-lspconfig`'s ESLint server is named `eslint` (backed by `vscode-eslint-language-server`, Mason package `eslint-lsp`).
+- Added `lua/plugins/trouble.lua`: `folke/trouble.nvim` with keymaps `<leader>xw` (project-wide diagnostics list) and `<leader>xd` (current-document-only diagnostics list).
+- Added `lspconfig.eslint.setup({capabilities = capabilities})` in `lua/plugins/lsp-config.lua` so ESLint problems publish as native `vim.diagnostic` (picked up automatically by Mason via `auto_install = true`), appearing in Trouble alongside `typescript-tools.nvim`'s type errors.
+- User reported the `<leader>xw`/`<leader>xd` keymaps appeared to do nothing when tested; before root-causing, user instead asked for easier-to-use Ex commands. Added `:Err here` (current file) and `:Err all` (whole project) as a single `Err` user command with tab-completable `here`/`all` arguments, registered at file scope (not inside the plugin's lazy `config`/`opts`) so the command exists immediately at startup rather than only after `trouble.nvim` loads — it internally calls `:Trouble diagnostics toggle[ filter.buf=0]`, which is still what actually triggers the lazy load. Kept the original `<leader>xw`/`<leader>xd` keymaps as well.
+- User tested `:Err all` with no files opened in the session and got "No results for diagnostics" despite knowing the project had TS errors on disk. Root cause: `vim.diagnostic`/Trouble's diagnostics source only reflects files the LSP has actually loaded into a buffer — it can't see errors in files never opened this session, so it isn't a true whole-project scan.
+- Redesigned `:Err all` to run `tsc --noEmit --pretty false` and `eslint . -f unix` as real async CLI jobs (`vim.fn.jobstart`, cwd = `getcwd()`) in parallel, parse their plain-text output (tsc: `file(line,col): error TSxxxx: msg`; eslint unix formatter: `file:line:col: msg`) into the quickfix list, then open it via `:Trouble qflist toggle`. Notifies "Scanning project..." on start (since it's async) and reports stderr from either tool (e.g. missing `tsconfig.json`, `eslint`/`tsc` not installed locally) if zero results come back, instead of a bare "no results". Uses `npx --no-install` so it only runs binaries already present in the project's `node_modules`, never triggers a network install.
+- `:Err here` unchanged — current-buffer LSP diagnostics, which are accurate the moment a file is open.
+- Key files: `lua/plugins/trouble.lua` (new), `lua/plugins/lsp-config.lua`. Uncommitted, pending user testing/approval.
+
+## 2026-08-02 - :Pwd command to show project root path
+
+- Added `:Pwd` user command showing `vim.fn.getcwd()` (the project root, i.e. what neo-tree is rooted at) in a centered floating toast for 10 seconds, then auto-closing via `vim.defer_fn`.
+- Deliberately did not use plain `vim.notify()` for this — with no notification plugin installed (checked: no `nvim-notify` or similar in `lazy-lock.json`), `vim.notify()` just echoes to the message area and stays until something else overwrites it, it doesn't auto-dismiss after a fixed duration. Built a dedicated floating window instead so the 10-second auto-close is guaranteed regardless of other activity.
+- Key file: `lua/vim-options.lua`. Uncommitted, pending user testing/approval.
+
+## 2026-08-02 - Unified toast notifications (bottom-right, then moved to top-right)
+
+- User wanted the clipboard-copy message and `:Pwd`'s path display to both appear as toast notifications (not the plain message-area `vim.notify`) and auto-remove after 10 seconds.
+- Refactored into a single shared `show_toast(text, duration)` helper in `lua/vim-options.lua`: floating window, auto-closed via `vim.defer_fn` after `duration` (default 10000ms). Tracks currently-visible toasts in `active_toasts` and stacks new ones so simultaneous toasts (e.g. a clipboard copy right after `:Pwd`) don't overlap/overwrite each other.
+- Replaced the clipboard mapping's `vim.notify(...)` calls and `:Pwd`'s standalone floating window with calls to `show_toast(...)`.
+- Initially anchored bottom-right (stacking upward); user then asked for top-right instead — changed to `row = 1` anchored at the top, stacking downward (`row += 3` per active toast), `col` unchanged (`vim.o.columns - width - 2`, right-aligned).
+- Key file: `lua/vim-options.lua`. Uncommitted, pending user testing/approval.
